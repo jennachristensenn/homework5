@@ -1,0 +1,22 @@
+---
+title: "Exploratory Data Analysis"
+format: html
+editor: visual
+---
+
+## Task 1: Reading in and modifying data
+
+Reading in data with base R
+```{r}
+d1=read.table("C:/Users/jenna/OneDrive/Desktop/repo/homework5/student-mat.csv",sep=";",header=TRUE)
+d2=read.table("C:/Users/jenna/OneDrive/Desktop/repo/homework5/student-por.csv",sep=";",header=TRUE)
+
+d3=merge(d1,d2,by=c("school","sex","age","address","famsize","Pstatus","Medu","Fedu","Mjob","Fjob","reason","nursery","internet"))
+print(nrow(d3))
+```
+
+Reading in data using Tidyverse functions 
+```{r}
+
+```
+
