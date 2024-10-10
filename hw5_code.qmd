@@ -2,7 +2,13 @@
 title: "Exploratory Data Analysis"
 format: html
 editor: visual
+author: Jenna Christensen
 ---
+
+```{r, warning = FALSE}
+library(tidyverse)
+library(dplyr)
+```
 
 ## Task 1: Reading in and modifying data
 
@@ -17,6 +23,272 @@ print(nrow(d3))
 
 Reading in data using Tidyverse functions 
 ```{r}
+math_data <- read_csv2("student-mat.csv")
+port_data <- read_csv2("student-por.csv")
+```
 
+Inner join with all variabels causes a 'many to many' relationship between x and y.
+```{r}
+join_test <-inner_join(math_data,
+           port_data, 
+           by = join_by(school == school, 
+                        sex == sex,
+                        age == age,
+                        address == address,
+                        famsize == famsize,
+                        Pstatus == Pstatus,
+                        Medu == Medu, 
+                        Fedu == Fedu,
+                        reason == reason,
+                        nursery == nursery,
+                        internet == internet)) |>
+             collect()
+```
+
+Inner join with some variables left out
+```{r}
+out <- c("G1", "G2", "G3", "paid", "absences")
+vars <- intersect(names(math_data), names(port_data))
+
+join_vars <- setdiff(vars, out)
+
+combined_data <- inner_join(
+  math_data,
+  port_data,
+  by = join_vars) |> 
+collect()
+```
+
+Creating factors for the three datasets 
+```{r}
+math_data <- math_data |>
+  mutate(guardianF = as.factor(guardian), # who's their parent
+         internetF = as.factor(internet), # access to internet at home
+         healthF = as.factor(health), # current health status
+         higherF = as.factor(higher)) # wants to take higher education
+
+print(math_data)
+
+port_data <- port_data |>
+  mutate(guardianF = as.factor(guardian), # who's their parent
+         internetF = as.factor(internet), # access to internet at home
+         healthF = as.factor(health), # current health status
+         higherF = as.factor(higher)) # wants to take higher education
+
+print(port_data)
+
+combined_data <- combined_data |>
+  mutate(guardianF = as.factor(guardian), # who's their parent
+         internetF = as.factor(internet), # access to internet at home
+         healthF = as.factor(health), # current health status
+         higherF = as.factor(higher), # wants to take higher education
+         Medu = as.character(Medu),
+         Fedu = as.character(Fedu),
+         traveltime = as.character(traveltime),
+         studytime = as.character(studytime),
+         failures = as.character(failures),
+         famrel = as.character(famrel),
+         freetime = as.character(freetime),
+         goout = as.character(goout),
+         Dalc = as.character(Dalc),
+         Walc = as.character(Walc))
+
+print(combined_data)
+```
+
+## Task 2: Summarize the Categorical Data
+
+Investigating NAs: website claims no missing values, which is confirmed here. Additionally the combined_data tibble looks correctly formatted. 
+```{r}
+sum_na <- function(column){
+ sum(is.na(column))
+}
+na_counts <- combined_data |>
+ summarize(across(everything(), sum_na))
+
+na_counts
+```
+
+One way contingency table: Mother was reported 237 times as guardian.
+```{r}
+one_way_cont <- table(combined_data$guardianF)
+one_way_cont
+```
+
+Two way contingency table: There are 15 people that don't have access to internet that have very good health.
+```{r}
+two_way_cont <- table(combined_data$internetF, combined_data$healthF)
+two_way_cont
+```
+
+Three way contingency table: For people who have very bad health, four people don't have access to internet that are taken care of by their mother.
+```{r}
+three_way_cont <- table(combined_data$guardianF, combined_data$internetF, combined_data$healthF)
+three_way_cont
+```
+
+Creating two way table using filtering. There are 102 people who report good health and internet access.
+```{r}
+conditional_two_way_yes <- combined_data |>
+  filter(internetF == "yes")
+table(conditional_two_way_yes$internetF, conditional_two_way_yes$healthF)
+```
+Creating a two way table using subset of three way. There are 71 people who report their guardian as mother and have very good health while having access to home internet. 
+```{r}
+three_way_cont <- table(combined_data$guardianF, combined_data$internetF, combined_data$healthF)
+
+subset_three_way_cont <- three_way_cont["mother", , ]
+subset_three_way_cont
+```
+
+
+Creating a two way table using dplyr functions pivot_wider. No one reported having no internet and a guardian of other. 
+```{r}
+combined_data |>
+  group_by(guardianF, internetF) |>
+  summarize(count = n()) |>
+  pivot_wider(names_from = internetF, values_from = count)
+```
+
+Creating a stacked bar plot. The amount of people wihtout internet at home is relatively proportional between guardian of mother and father. 
+```{r}
+stack_bar <- ggplot(data = combined_data, aes(x = guardianF, fill = internetF))
+stack_bar + geom_bar() + labs(x = "Guardian", title = "Internet Access by Guardian") + scale_fill_discrete("Internet Access")
+```
+
+Side by side vbar plot. As pointed out earlier,  no one reported having no internet and a guardian of other.
+```{r}
+ggplot(data = combined_data, aes(x = guardianF, fill = internetF)) +
+  geom_bar(position = "dodge") +
+  labs(x = "Guardian", title = "Internet Access by Guardian") + 
+  scale_fill_discrete("Internet Access")
+```
+
+## Task 2: Summarize the Numerical Data
+
+Finding measures of center and spread. Most of the mean and median values are relatively similar. 
+```{r}
+combined_data |>
+  summarize(across(c(age, absences.x, G3.x), 
+                   list("mean" = mean, "median" = median), 
+                   .names = "{.fn}_{.col}"))
+```
+
+Finding measures of center and spread with filter subset. It appears absences has an outlier as the mean is further from the median compared to other variables. 
+```{r}
+combined_data |>
+  filter(G1.x > 10) |>
+  summarize(across(c(age, absences.x, G3.x), 
+                   list("mean" = mean, "median" = median), 
+                   .names = "{.fn}_{.col}"))
+```
+
+Finding measures of center and spread across a single grouping. The numbers between the two groups remain relatively similar to each other with the grouping. 
+```{r}
+combined_data |>
+  group_by(internetF) |>
+  summarize(across(c(age, absences.x, G3.x), 
+                   list("mean" = mean, "median" = median), 
+                   .names = "{.fn}_{.col}"))
+```
+
+Finding measures of center and spread across two groupings. Interesting that the group with the largest mean absences is not interested in higher education. 
+```{r}
+combined_data |>
+  group_by(internetF, higherF) |>
+  summarize(across(c(age, absences.x, G3.x), 
+                   list("mean" = mean, "median" = median), 
+                   .names = "{.fn}_{.col}"))
+```
+
+Correlation Matrix. Most values have relatively low correlation besides the grade variables.
+```{r}
+cor_matrix <- cor(select(combined_data, where(is.numeric)), use = "complete.obs")
+cor_matrix
+
+```
+
+Histogram of age and absenses by internet access. Here we see that both age and absences are skewed right, with absences more extreme than age.
+```{r}
+ggplot(data = combined_data, aes(x = age, fill = internetF)) +
+  geom_histogram() +
+  labs(x = "Age", title = "Age and Internet Access") +
+  scale_fill_discrete("Internet Access")
+
+ggplot(data = combined_data, aes(x = absences.x, fill = internetF)) +
+  geom_histogram() +
+  labs(x = "Absenses", title = "Absenses and Internet Access") +
+  scale_fill_discrete("Internet Access")
+
+
+```
+
+Kernel density plot of age and absenses by internet access. It's interesting that the troughs are more intense in the age plot representing people that have internet access over doesn't have internet access.
+```{r}
+ggplot(data = combined_data, aes(x = age, fill = internetF)) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Age", title = "Age and Internet Access") +
+  scale_fill_discrete("Internet Access")
+
+ggplot(data = combined_data, aes(x = absences.x, fill = internetF)) +
+  geom_density(alpha = 0.5) +
+  labs(x = "Absenses", title = "Absenses and Internet Access") +
+  scale_fill_discrete("Internet Access")
+```
+
+Box plot of age and absenses by internet access. Here we see the spread of absenses with internet is a lot wider than without internet. 
+```{r}
+ggplot(data = combined_data, aes(x = age, fill = internetF)) +
+  geom_boxplot() +
+  labs(x = "Age", title = "Age and Internet Access") +
+  scale_fill_discrete("Internet Access")
+
+ggplot(data = combined_data, aes(x = absences.x, fill = internetF)) +
+  geom_boxplot() +
+  labs(x = "Absenses", title = "Absenses and Internet Access") +
+  scale_fill_discrete("Internet Access")
+```
+
+Creating scatter plots of age and absenses with G3.The whole numbers aspect of this data makes the scatter plot seem not as random, therefore it is difficult to determine a pattern or trend.
+```{r}
+ggplot(data = combined_data, aes(x = age, y = G3.x, color = internetF)) +
+  geom_point() +
+  labs(x = "Age", y = "Final Grade", title = "Age and Final Grade") +
+  scale_color_discrete("Internet Access")
+
+ggplot(data = combined_data, aes(x = absences.x, y = G3.x, color = internetF)) +
+  geom_point() +
+  labs(x = "Absenses", y = "Final Grade", title = "Absenses and Final Grade") +
+  scale_color_discrete("Internet Access")
+```
+
+Creating scatter plots of the same variables but with faceting on health. The second graph of absenses and health is interesting because I would have assumed people with poor health would have higher rates of absenses (doesn't seem to be the case).
+```{r}
+ggplot(data = combined_data, aes(x = age, y = G3.x, color = internetF)) +
+  geom_point() +
+  labs(x = "Age", y = "Final Grade", title = "Age and Final Grade") +
+  scale_color_discrete("Internet Access") +
+  facet_wrap(~ health)
+
+ggplot(data = combined_data, aes(x = absences.x, y = G3.x, color = internetF)) +
+  geom_point() +
+  labs(x = "Absenses", y = "Final Grade", title = "Absenses and Final Grade") +
+  scale_color_discrete("Internet Access") +
+  facet_wrap(~ health)
+```
+
+Creating scatter plots of the same variables but with faceting on higher and guardian. Everyone who reported having no internet at home wants to take higher education.
+```{r}
+ggplot(data = combined_data, aes(x = age, y = G3.x, color = internetF)) +
+  geom_point() +
+  labs(x = "Age", y = "Final Grade", title = "Age and Final Grade Based on Guardian and Higher Education Intent") +
+  scale_color_discrete("Internet Access") +
+  facet_wrap(higher ~ guardian)
+
+ggplot(data = combined_data, aes(x = absences.x, y = G3.x, color = internetF)) +
+  geom_point() +
+  labs(x = "Absenses", y = "Final Grade", title = "Absenses and Final Grade Based on Guardian and Higher Education Intent") +
+  scale_color_discrete("Internet Access") +
+  facet_wrap(higher ~ guardian)
 ```
 
